@@ -9,7 +9,6 @@ import (
 	"image/color"
 	"image/draw"
 	"image/gif"
-	"log"
 	"os"
 	"strconv"
 
@@ -38,6 +37,9 @@ func main() {
 	x, y := 0, 0
 	fg, bg := 97, 30
 	for iev, ev := range c.EventStream {
+		if iev%100 == 99 {
+			os.Stderr.WriteString(".")
+		}
 		if ev.Type != "o" {
 			continue
 		}
@@ -69,9 +71,9 @@ func main() {
 					// between this and next event... seen something like
 					// this... let's try moving it to next event.
 					if len(unparsed) < 30 && iev+1 < len(c.EventStream) { // sanity check for our assumption
-						log.Printf("fixing ESC %q", unparsed)
+						// log.Printf("fixing ESC %q", unparsed)
 						c.EventStream[iev+1].Data = string(ch) + string(unparsed) + c.EventStream[iev+1].Data
-						log.Printf("fix: %q", c.EventStream[iev+1].Data)
+						// log.Printf("fix: %q", c.EventStream[iev+1].Data)
 						unparsed = nil
 						continue
 					}
@@ -107,6 +109,11 @@ func main() {
 					if len(seq.Params) >= 2 {
 						y = atoi(seq.Params[1], 1) - 1
 					}
+				case 'C': // move cursor forward, unless past EOL already
+					x += atoi([]byte(seqMode(seq, "1")), 1)
+					if x >= w {
+						x = w - 1
+					}
 				case 'm': // set colors
 					if len(seq.Params) == 0 {
 						fg, bg = 97, 30
@@ -125,12 +132,22 @@ func main() {
 							}
 						}
 					}
-				case 'h':
-					// FIXME: "\x1b[?25h = show the cursor"
-					// FIXME: "\x1b[?1049h = enable alternative screen buffer"
-				case 'l':
-					// FIXME: "\x1b[?25l = hide the cursor"
-					// FIXME: "\x1b[?1049l = disable alternative screen buffer"
+				case 'h', 'l':
+					// see also: https://www.real-world-systems.com/docs/ANSIcode.html
+					switch cmd := string(seq.Params[0]) + string(seq.Command); cmd {
+					case "?25h": // TODO: show the cursor
+					case "?25l": // TODO: hide the cursor
+					case "?1049h": // TODO: enable alternative screen buffer
+					case "?1049l": // TODO: disable alternative screen buffer
+					case "?12l": // TODO: local echo - input from keyboard sent to screen
+					case "?1l": // TODO: transmit only unprotected characters
+					case "?1000l": // TODO: ??? part of "rs2" reset sequence for VTE (?)
+					case "?1002l": // TODO: ??? something related to mouse?
+					case "?1003l": // TODO: ??? something related to mouse?
+					case "?1006l": // TODO: ??? something related to mouse?
+					default:
+						panic(fmt.Sprintf("unknown control sequence: %q", cmd))
+					}
 				default:
 					panic(fmt.Sprintf("unknown control sequence: %q %#v", ev.Data, seq))
 				}
@@ -309,7 +326,7 @@ func parseANSISequence(b []byte) (*ansi.SequenceData, []byte) {
 	// TODO(akavel): would IndexFunc be faster?
 	icmd := bytes.IndexAny(b, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	if icmd == -1 {
-		log.Printf("cmd not found in %q", b)
+		// log.Printf("cmd not found in %q", b)
 		return nil, b
 	}
 	return &ansi.SequenceData{
