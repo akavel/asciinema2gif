@@ -32,20 +32,18 @@ func main() {
 	x, y := 0, 0
 	scr.Image.Palette[0] = color.RGBA{0, 0, 0, 128}
 	scr.Image.Palette[1] = color.RGBA{255, 255, 255, 128}
-	if false {
-		for _, ev := range c.EventStream {
-			if ev.Type != "o" {
-				continue
-			}
-			lex := ansi.NewLexer([]byte(ev.Data))
-			for tok := lex.NextItem(); tok.T != ansi.EOF; tok = lex.NextItem() {
-				fmt.Printf("%s %q\n", tok.T.String(), string(tok.Value))
-				switch tok.T {
-				case ansi.RawBytes:
-					for _, ch := range tok.Value {
-						scr.SetCell(x, y, rune(ch), 1, 0)
-						x++
-					}
+	for _, ev := range c.EventStream {
+		if ev.Type != "o" {
+			continue
+		}
+		lex := ansi.NewLexer([]byte(ev.Data))
+		for tok := lex.NextItem(); tok.T != ansi.EOF; tok = lex.NextItem() {
+			fmt.Printf("%s %q\n", tok.T.String(), string(tok.Value))
+			switch tok.T {
+			case ansi.RawBytes:
+				for _, ch := range tok.Value {
+					scr.SetCell(x, y, rune(ch), 1, 0)
+					x++
 				}
 			}
 		}
@@ -97,7 +95,8 @@ func NewScreen(w, h int, font *truetype.Font) Screen {
 	cw := b.Max.X - b.Min.X
 	ch := b.Max.Y - b.Min.Y
 	rect := image.Rect(0, 0, w*cw.Ceil(), h*ch.Ceil())
-	palette := make(color.Palette, 256)
+	// palette := make(color.Palette, 256)
+	palette := make(color.Palette, 2)
 	img := image.NewPaletted(rect, palette)
 
 	ctx := freetype.NewContext()
@@ -127,5 +126,5 @@ func (s *Screen) SetCell(x, y int, ch rune, fg, bg int) {
 	w := b.Max.X - b.Min.X
 	h := b.Max.Y - b.Min.Y
 	// FIXME: ensure below multiplications are correct
-	s.Font.DrawString(string(ch), fixed.P(x*w.Ceil(), y*h.Ceil()))
+	s.Font.DrawString(string(ch), fixed.P(x*w.Ceil(), (y+1)*h.Ceil()))
 }
