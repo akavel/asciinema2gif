@@ -239,7 +239,18 @@ func NewScreen(w, h int, font *truetype.Font) Screen {
 	// TODO(akavel): check if something like this is maybe already available in new versions of freetype
 	fontScale := fixed.Int26_6(fontSize * fontDPI * (64.0 / 72.0))
 
-	b := font.Bounds(fontScale)
+	// Calculate bounds for the set of ASCII 8-bit characters glyphs, to avoid
+	// having double-width (e.g. Chinese?) character glyphs in the measurement.
+	b := fixed.Rectangle26_6{}
+	for ch := rune(0); ch <= 255; ch++ {
+		idx := font.Index(ch)
+		glyph := truetype.GlyphBuf{}
+		err := glyph.Load(font, fontScale, idx, fontopt.HintingFull)
+		if err != nil {
+			continue
+		}
+		b = b.Union(glyph.Bounds)
+	}
 	cell := image.Rect(
 		b.Min.X.Ceil(), b.Min.Y.Ceil(),
 		b.Max.X.Ceil(), b.Max.Y.Ceil())
