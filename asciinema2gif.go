@@ -11,6 +11,7 @@ import (
 	"image/gif"
 	"os"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/cirocosta/asciinema-edit/cast"
 	"github.com/golang/freetype"
@@ -61,10 +62,14 @@ func main() {
 					continue
 				}
 				// sequence not detected, so we just have raw byte
-				// FIXME(akavel): parse rune
-				ch := unparsed[0]
-				unparsed = unparsed[1:]
+				// TODO(akavel): handle non-utf8 encodings?
+				ch, sz := utf8.DecodeRune(unparsed)
+				unparsed = unparsed[sz:]
 				switch ch {
+				case '\t':
+					newx := x/8 + 8
+					clearCells(scr, x, y, newx-1, y, bg)
+					newx = x
 				case '\n':
 					y++
 					// x = 0
@@ -87,7 +92,7 @@ func main() {
 					}
 					panic(fmt.Sprintf("undetected control sequence in event %d (t=%v) = %q (unparsed = %q)", iev, ev.Time, ev.Data, unparsed))
 				default:
-					scr.SetCell(x, y, rune(ch), fg, bg)
+					scr.SetCell(x, y, ch, fg, bg)
 					x++
 				}
 			} else {
@@ -97,7 +102,7 @@ func main() {
 					switch seqMode(seq, "0") {
 					case "2", "3":
 						// clear whole screen
-						draw.Draw(scr.Image, scr.Image.Bounds(), image.NewUniform(scr.Image.Palette[0]), image.Pt(0, 0), draw.Src)
+						clearCells(scr, 0, 0, w, h, bg)
 					default:
 						panic(fmt.Sprintf("unknown control sequence in: %q %#v", ev.Data, seq))
 					}
@@ -119,6 +124,7 @@ func main() {
 					}
 				case 'C': // move cursor forward, unless past EOL already
 					x += atoi([]byte(seqMode(seq, "1")), 1)
+					// TODO: should we also clear? or not?
 					if x >= w {
 						x = w - 1
 					}
@@ -148,7 +154,7 @@ func main() {
 					case "?1049h": // TODO: enable alternative screen buffer
 					case "?1049l": // TODO: disable alternative screen buffer
 					case "?12l": // TODO: local echo - input from keyboard sent to screen
-					case "?1l": // TODO: transmit only unprotected characters
+					case "?1l": // TODO: transmit only unprotected characters ???
 					case "?1000l": // TODO: ??? part of "rs2" reset sequence for VTE (?)
 					case "?1002l": // TODO: ??? something related to mouse?
 					case "?1003l": // TODO: ??? something related to mouse?
@@ -174,11 +180,7 @@ func main() {
 		}
 	}
 
-	pal := scr.Image.Palette
-	for pal[len(pal)-1] == nil {
-		pal = pal[:len(pal)-1]
-	}
-	scr.Image.Palette = pal
+	os.Stderr.WriteString("\n")
 
 	f, err := os.Create("asciinema.gif")
 	if err != nil {
@@ -199,8 +201,8 @@ func die(msg string) {
 func NewScreen(w, h int, font *truetype.Font) Screen {
 	// FIXME(akavel): variable font size & DPI, as flags
 	// Note: that's the default value used in the truetype package
-	// const fontDPI = 72
-	const fontDPI = 144
+	const fontDPI = 72
+	// const fontDPI = 144
 	const fontSize = 12.0
 	// See: freetype.Context#recalc()
 	// at: https://github.com/golang/freetype/blob/41fa49aa5b23cc7c4082c9aaaf2da41e195602d9/freetype.go#L263
@@ -260,13 +262,8 @@ type Screen struct {
 
 func (s *Screen) SetCell(x, y int, ch rune, fg, bg int) {
 	clearCells(*s, x, y, x, y, bg)
-	// draw.Draw(s.Image, image.Rect(
-	// 	x*s.Cell.Dx(), y*s.Cell.Dy(),
-	// 	(x+1)*s.Cell.Dx(), (y+1)*s.Cell.Dy()),
-	// 	image.NewUniform(s.Image.Palette[bg]),
-	// 	image.Pt(0, 0), draw.Src)
 	s.Font.SetSrc(image.NewUniform(s.Image.Palette[fg]))
-	s.Font.DrawString(string(ch), fixed.P(x*s.Cell.Dx(), y*s.Cell.Dy()+s.Cell.Max.Y))
+	s.Font.DrawString(string(ch), fixed.P(x*s.Cell.Dx(), y*s.Cell.Dy()+s.Cell.Max.Y-1))
 }
 
 func atoi(b []byte, default_ int) int {
