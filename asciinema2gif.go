@@ -3,11 +3,13 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/gif"
+	"log"
 	"os"
 	"strconv"
 
@@ -39,21 +41,28 @@ func main() {
 		if ev.Type != "o" {
 			continue
 		}
-		lex := ansi.NewLexer([]byte(ev.Data))
-		for tok := lex.NextItem(); tok.T != ansi.EOF; tok = lex.NextItem() {
-			fmt.Printf("%s %q\n", tok.T.String(), string(tok.Value))
-			switch tok.T {
-			case ansi.RawBytes:
-				for _, ch := range tok.Value {
+		unparsed := []byte(ev.Data)
+		for len(unparsed) > 0 {
+			var seq *ansi.SequenceData
+			seq, unparsed = parseANSISequence(unparsed)
+
+			if seq == nil {
+				// sequence not detected, so we just have raw byte
+				// FIXME(akavel): parse rune
+				ch := unparsed[0]
+				unparsed = unparsed[1:]
+				switch ch {
+				case '\n':
+					y++
+					x = 0
+				case 0x1b:
+					panic(fmt.Sprintf("undetected control sequence in event %d (t=%v) = %q (unparsed = %q)", iev, ev.Time, ev.Data, unparsed))
+				default:
 					scr.SetCell(x, y, rune(ch), fg, bg)
 					x++
 				}
-			case ansi.ControlSequence:
-				seq, err := ansi.ParseControlSequence(tok.Value)
-				if err != nil {
-					// TODO(akavel): try to avoid having to import 'fmt' and see if it reduces binary size
-					panic(fmt.Sprintf("cannot parse control sequence %q in event %d (t=%v)", tok.Value, iev, ev.Time))
-				}
+			} else {
+				// ANSI control sequence detected
 				switch seq.Command {
 				case 'J': // clear parts of the screen
 					switch seqMode(seq, "0") {
@@ -61,7 +70,7 @@ func main() {
 						// clear whole screen
 						draw.Draw(scr.Image, scr.Image.Bounds(), image.NewUniform(scr.Image.Palette[0]), image.Pt(0, 0), draw.Src)
 					default:
-						panic(fmt.Sprintf("unknown control sequence: %q %#v", tok.Value, seq))
+						panic(fmt.Sprintf("unknown control sequence in: %q %#v", ev.Data, seq))
 					}
 				case 'K': // clear parts of line
 					switch seqMode(seq, "0") {
@@ -69,22 +78,22 @@ func main() {
 						// clear from cursor to end of line
 						clearCells(scr, x, y, w, y, bg)
 					default:
-						panic(fmt.Sprintf("unknown control sequence: %q %#v", tok.Value, seq))
+						panic(fmt.Sprintf("unknown control sequence: %q %#v", ev.Data, seq))
 					}
 				case 'H': // position cursor
 					x, y = 0, 0
 					if len(seq.Params) >= 1 {
-						x = atoi(seq.Params[0]) - 1
+						x = atoi(seq.Params[0], 1) - 1
 					}
 					if len(seq.Params) >= 2 {
-						y = atoi(seq.Params[1]) - 1
+						y = atoi(seq.Params[1], 1) - 1
 					}
 				case 'm': // set colors
 					if len(seq.Params) == 0 {
 						fg, bg = 97, 30
 					} else {
 						for _, p := range seq.Params {
-							n := atoi(p)
+							n := atoi(p, 0)
 							switch {
 							case 90 <= n && n <= 97:
 								fg = n
@@ -104,7 +113,7 @@ func main() {
 					// FIXME: "\x1b[?25l = hide the cursor"
 					// FIXME: "\x1b[?1049l = disable alternative screen buffer"
 				default:
-					panic(fmt.Sprintf("unknown control sequence: %q %#v", tok.Value, seq))
+					panic(fmt.Sprintf("unknown control sequence: %q %#v", ev.Data, seq))
 				}
 			}
 		}
@@ -222,7 +231,10 @@ func (s *Screen) SetCell(x, y int, ch rune, fg, bg int) {
 	s.Font.DrawString(string(ch), fixed.P(x*s.Cell.Dx(), y*s.Cell.Dy()+s.Cell.Max.Y))
 }
 
-func atoi(b []byte) int {
+func atoi(b []byte, default_ int) int {
+	if len(b) == 0 {
+		return default_
+	}
 	i, err := strconv.Atoi(string(b))
 	if err != nil {
 		panic(err)
@@ -242,4 +254,37 @@ func clearCells(scr Screen, x1, y1, x2, y2 int, color int) {
 		x1*scr.Cell.Dx(), y1*scr.Cell.Dy(),
 		(x2+1)*scr.Cell.Dx(), (y2+1)*scr.Cell.Dy())
 	draw.Draw(scr.Image, rect, image.NewUniform(scr.Image.Palette[color]), image.Pt(0, 0), draw.Src)
+}
+
+// TODO(akavel): better parser, less ad-hoc
+// parseANSISequence parses an ANSI sequence if b starts with an ESC character,
+// otherwise returns nil, b
+func parseANSISequence(b []byte) (*ansi.SequenceData, []byte) {
+	if len(b) < 2 || b[0] != 0x1b {
+		return nil, b
+	}
+
+	switch {
+	case b[1] == '[':
+		// log.Printf("got [")
+		// ok, continue
+	// TODO(akavel): properly handle two-byte sequences; for now, ignoring
+	// them; see: http://ascii-table.com/ansi-escape-sequences-vt-100.php
+	case bytes.HasPrefix(b[1:], []byte("(B")):
+		// log.Printf("got (B, ret=%q", b[3:])
+		return parseANSISequence(b[3:])
+	default:
+		panic(fmt.Sprintf("unknown ANSI sequence: %q", b))
+	}
+
+	// TODO(akavel): would IndexFunc be faster?
+	icmd := bytes.IndexAny(b, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	if icmd == -1 {
+		log.Printf("cmd not found in %q", b)
+		return nil, b
+	}
+	return &ansi.SequenceData{
+		Params:  bytes.Split(b[2:icmd], []byte(";")),
+		Command: b[icmd],
+	}, b[icmd+1:]
 }
