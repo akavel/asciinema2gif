@@ -112,10 +112,10 @@ func main() {
 				case 'H': // position cursor
 					x, y = 0, 0
 					if len(seq.Params) >= 1 {
-						x = atoi(seq.Params[0], 1) - 1
+						y = atoi(seq.Params[0], 1) - 1
 					}
 					if len(seq.Params) >= 2 {
-						y = atoi(seq.Params[1], 1) - 1
+						x = atoi(seq.Params[1], 1) - 1
 					}
 				case 'C': // move cursor forward, unless past EOL already
 					x += atoi([]byte(seqMode(seq, "1")), 1)
