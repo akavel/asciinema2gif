@@ -52,6 +52,18 @@ func main() {
 		if ev.Type != "o" {
 			continue
 		}
+
+		// TODO(akavel): is this correct calculation of delay, or not? should we rather store tprev as int?
+		dt := int(ev.Time*100) - int(tprev*100)
+		if dt > 0 {
+			// FIXME(akavel): only emit dirty rectangles (diff with previous img?)
+			frame := image.NewPaletted(scr.Image.Bounds(), scr.Image.Palette)
+			draw.Draw(frame, scr.Image.Bounds(), scr.Image, image.Pt(0, 0), draw.Src)
+			anim.Image = append(anim.Image, frame)
+			anim.Delay = append(anim.Delay, dt)
+			tprev = ev.Time
+		}
+
 		unparsed := []byte(ev.Data)
 		for len(unparsed) > 0 {
 			var seq *ansi.SequenceData
@@ -166,17 +178,6 @@ func main() {
 					panic(fmt.Sprintf("unknown control sequence: %q %#v", ev.Data, seq))
 				}
 			}
-		}
-
-		// TODO(akavel): is this correct calculation of delay, or not? should we rather store tprev as int?
-		dt := int(ev.Time*100) - int(tprev*100)
-		if dt > 0 {
-			// FIXME(akavel): only emit dirty rectangles (diff with previous img?)
-			frame := image.NewPaletted(scr.Image.Bounds(), scr.Image.Palette)
-			draw.Draw(frame, scr.Image.Bounds(), scr.Image, image.Pt(0, 0), draw.Src)
-			anim.Image = append(anim.Image, frame)
-			anim.Delay = append(anim.Delay, dt)
-			tprev = ev.Time
 		}
 	}
 
