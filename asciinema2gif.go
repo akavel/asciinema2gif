@@ -25,6 +25,7 @@ import (
 var (
 	dpi      = flag.Int("dpi", 144, "dots per inch (resolution)")
 	fontSize = flag.Float64("font-size", 12, "font size")
+	maxPause = flag.Float64("i", 0, "max pause between frames, in seconds (0 means unlimited)")
 )
 
 func main() {
@@ -68,6 +69,9 @@ func main() {
 			frame := image.NewPaletted(scr.Image.Bounds(), scr.Image.Palette)
 			draw.Draw(frame, scr.Image.Bounds(), scr.Image, image.Pt(0, 0), draw.Src)
 			anim.Image = append(anim.Image, frame)
+			if int(*maxPause*100) > 0 && dt > int(*maxPause*100) {
+				dt = int(*maxPause * 100)
+			}
 			anim.Delay = append(anim.Delay, dt)
 			tprev = ev.Time
 		}
