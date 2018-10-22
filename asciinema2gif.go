@@ -1,3 +1,5 @@
+// TODO: GPL license
+
 package main
 
 import (
@@ -92,8 +94,24 @@ func die(msg string) {
 }
 
 func NewScreen(w, h int, font *truetype.Font) Screen {
+	// Note: that's the default value used in the truetype package
+	const fontDPI = 72
+	const fontSize = 12.0
+	// See: freetype.Context#recalc()
+	// at: https://github.com/golang/freetype/blob/41fa49aa5b23cc7c4082c9aaaf2da41e195602d9/freetype.go#L263
+	// also a comment from the same file:
+	// "scale is the number of 26.6 fixed point units in 1 em"
+	// (where 26.6 means 26 bits integer and 6 fractional)
+	// also from docs:
+	// "If the device space involves pixels, 64 units
+	// per pixel is recommended, since that is what
+	// the bytecode hinter uses [...]".
+	// TODO(akavel): check if something like this is maybe already available in new versions of freetype
+	const fontScale = fixed.Int26_6(fontSize * fontDPI * (64.0 / 72.0))
+
 	// FIXME: variable scale, as flag
-	b := font.Bounds(fixed.I(10))
+	// b := font.Bounds(fixed.I(10))
+	b := font.Bounds(fontScale)
 	cw := b.Max.X - b.Min.X
 	ch := b.Max.Y - b.Min.Y
 	rect := image.Rect(0, 0, w*cw.Ceil(), h*ch.Ceil())
@@ -103,8 +121,8 @@ func NewScreen(w, h int, font *truetype.Font) Screen {
 
 	ctx := freetype.NewContext()
 	ctx.SetFont(font)
-	// FIXME: match scale used for bounds
-	ctx.SetFontSize(12)
+	ctx.SetFontSize(fontSize)
+	ctx.SetDPI(fontDPI)
 	ctx.SetDst(img)
 	ctx.SetClip(img.Bounds())
 
