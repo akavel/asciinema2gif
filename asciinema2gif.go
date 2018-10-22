@@ -112,9 +112,10 @@ func NewScreen(w, h int, font *truetype.Font) Screen {
 	// FIXME: variable scale, as flag
 	// b := font.Bounds(fixed.I(10))
 	b := font.Bounds(fontScale)
-	cw := b.Max.X - b.Min.X
-	ch := b.Max.Y - b.Min.Y
-	rect := image.Rect(0, 0, w*cw.Ceil(), h*ch.Ceil())
+	cell := image.Rect(
+		b.Min.X.Ceil(), b.Min.Y.Ceil(),
+		b.Max.X.Ceil(), b.Max.Y.Ceil())
+	rect := image.Rect(0, 0, w*cell.Dx(), h*cell.Dy())
 	// palette := make(color.Palette, 256)
 	palette := make(color.Palette, 3)
 	img := image.NewPaletted(rect, palette)
@@ -128,26 +129,23 @@ func NewScreen(w, h int, font *truetype.Font) Screen {
 
 	return Screen{
 		Image: img,
-		CellW: cw.Ceil(),
-		CellH: ch.Ceil(),
 		Font:  ctx,
+		Cell:  cell,
 	}
 }
 
 type Screen struct {
-	Image        *image.Paletted
-	CellW, CellH int
-	Font         *freetype.Context
+	Image *image.Paletted
+	Font  *freetype.Context
+	Cell  image.Rectangle
 }
 
 func (s *Screen) SetCell(x, y int, ch rune, fg, bg int) {
 	draw.Draw(s.Image, image.Rect(
-		x*s.CellW, y*s.CellH,
-		(x+1)*s.CellW, (y+1)*s.CellH),
+		x*s.Cell.Dx(), y*s.Cell.Dy(),
+		(x+1)*s.Cell.Dx(), (y+1)*s.Cell.Dy()),
 		image.NewUniform(s.Image.Palette[bg]),
 		image.Pt(0, 0), draw.Src)
-	// FIXME: adjust x and y appropriately
 	s.Font.SetSrc(image.NewUniform(s.Image.Palette[fg]))
-	// FIXME: ensure below multiplications are correct
-	s.Font.DrawString(string(ch), fixed.P(x*s.CellW, (y+1)*s.CellH))
+	s.Font.DrawString(string(ch), fixed.P(x*s.Cell.Dx(), y*s.Cell.Dy()+s.Cell.Max.Y))
 }
