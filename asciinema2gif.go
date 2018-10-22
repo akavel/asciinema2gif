@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/gif"
 	"os"
 
@@ -32,6 +33,7 @@ func main() {
 	x, y := 0, 0
 	scr.Image.Palette[0] = color.RGBA{0, 0, 0, 128}
 	scr.Image.Palette[1] = color.RGBA{255, 255, 255, 128}
+	scr.Image.Palette[2] = color.RGBA{255, 0, 0, 128}
 	for _, ev := range c.EventStream {
 		if ev.Type != "o" {
 			continue
@@ -42,7 +44,7 @@ func main() {
 			switch tok.T {
 			case ansi.RawBytes:
 				for _, ch := range tok.Value {
-					scr.SetCell(x, y, rune(ch), 1, 0)
+					scr.SetCell(x, y, rune(ch), 1, 2)
 					x++
 				}
 			}
@@ -96,7 +98,7 @@ func NewScreen(w, h int, font *truetype.Font) Screen {
 	ch := b.Max.Y - b.Min.Y
 	rect := image.Rect(0, 0, w*cw.Ceil(), h*ch.Ceil())
 	// palette := make(color.Palette, 256)
-	palette := make(color.Palette, 2)
+	palette := make(color.Palette, 3)
 	img := image.NewPaletted(rect, palette)
 
 	ctx := freetype.NewContext()
@@ -121,6 +123,11 @@ type Screen struct {
 }
 
 func (s *Screen) SetCell(x, y int, ch rune, fg, bg int) {
+	draw.Draw(s.Image, image.Rect(
+		x*s.CellW, y*s.CellH,
+		(x+1)*s.CellW, (y+1)*s.CellH),
+		image.NewUniform(s.Image.Palette[bg]),
+		image.Pt(0, 0), draw.Src)
 	// FIXME: adjust x and y appropriately
 	s.Font.SetSrc(image.NewUniform(s.Image.Palette[fg]))
 	// FIXME: ensure below multiplications are correct
