@@ -67,7 +67,7 @@ func main() {
 				unparsed = unparsed[sz:]
 				switch ch {
 				case '\t':
-					newx := x/8 + 8
+					newx := x/8*8 + 8
 					clearCells(scr, x, y, newx-1, y, bg)
 					newx = x
 				case '\n':
