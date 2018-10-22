@@ -34,8 +34,16 @@ func main() {
 
 	scr := NewScreen(w, h, font)
 
+	anim := &gif.GIF{
+		Config: image.Config{
+			Width:  scr.Image.Bounds().Max.X,
+			Height: scr.Image.Bounds().Max.Y,
+		},
+	}
+
 	x, y := 0, 0
 	fg, bg := 97, 30
+	tprev := 0.0
 	for iev, ev := range c.EventStream {
 		if iev%100 == 99 {
 			os.Stderr.WriteString(".")
@@ -153,17 +161,14 @@ func main() {
 				}
 			}
 		}
-	}
-	for i := 0; i < scr.Image.Bounds().Max.X && i < scr.Image.Bounds().Max.Y; i++ {
-		scr.Image.SetColorIndex(i, i, 1)
-		// scr.Image.Set(i, i, 1)
-	}
 
-	// TODO: loop events:
-	// TODO: - parse event's data
-	// TODO: - render event's contents on simulated window, using the font
-	// TODO: - add image into gif struct
-	// TODO: render animated gif asciinema.gif
+		// FIXME(akavel): only emit dirty rectangles (diff with previous img?)
+		frame := image.NewPaletted(scr.Image.Bounds(), scr.Image.Palette)
+		draw.Draw(frame, scr.Image.Bounds(), scr.Image, image.Pt(0, 0), draw.Src)
+		anim.Image = append(anim.Image, frame)
+		anim.Delay = append(anim.Delay, int((ev.Time-tprev)*100.0))
+		tprev = ev.Time
+	}
 
 	pal := scr.Image.Palette
 	for pal[len(pal)-1] == nil {
@@ -171,20 +176,20 @@ func main() {
 	}
 	scr.Image.Palette = pal
 
-	img := &gif.GIF{
-		Image: []*image.Paletted{scr.Image},
-		Delay: []int{0},
-		Config: image.Config{
-			Width:  scr.Image.Bounds().Max.X,
-			Height: scr.Image.Bounds().Max.Y,
-		},
-	}
+	// img := &gif.GIF{
+	// 	Image: []*image.Paletted{scr.Image},
+	// 	Delay: []int{0},
+	// 	Config: image.Config{
+	// 		Width:  scr.Image.Bounds().Max.X,
+	// 		Height: scr.Image.Bounds().Max.Y,
+	// 	},
+	// }
 	f, err := os.Create("asciinema.gif")
 	if err != nil {
 		die(err.Error())
 	}
 	defer f.Close()
-	err = gif.EncodeAll(f, img)
+	err = gif.EncodeAll(f, anim)
 	if err != nil {
 		die(err.Error())
 	}
