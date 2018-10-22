@@ -107,24 +107,22 @@ func NewScreen(w, h int, font *truetype.Font) Screen {
 	ctx.SetClip(img.Bounds())
 
 	return Screen{
-		Image:      img,
-		CellBounds: b,
-		Font:       ctx,
+		Image: img,
+		CellW: cw.Ceil(),
+		CellH: ch.Ceil(),
+		Font:  ctx,
 	}
 }
 
 type Screen struct {
-	Image      *image.Paletted
-	CellBounds fixed.Rectangle26_6
-	Font       *freetype.Context
+	Image        *image.Paletted
+	CellW, CellH int
+	Font         *freetype.Context
 }
 
 func (s *Screen) SetCell(x, y int, ch rune, fg, bg int) {
 	// FIXME: adjust x and y appropriately
 	s.Font.SetSrc(image.NewUniform(s.Image.Palette[fg]))
-	b := s.CellBounds
-	w := b.Max.X - b.Min.X
-	h := b.Max.Y - b.Min.Y
 	// FIXME: ensure below multiplications are correct
-	s.Font.DrawString(string(ch), fixed.P(x*w.Ceil(), (y+1)*h.Ceil()))
+	s.Font.DrawString(string(ch), fixed.P(x*s.CellW, (y+1)*s.CellH))
 }
