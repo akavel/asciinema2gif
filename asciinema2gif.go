@@ -47,6 +47,9 @@ func main() {
 			seq, unparsed = parseANSISequence(unparsed)
 
 			if seq == nil {
+				if len(unparsed) == 0 {
+					continue
+				}
 				// sequence not detected, so we just have raw byte
 				// FIXME(akavel): parse rune
 				ch := unparsed[0]
@@ -56,6 +59,16 @@ func main() {
 					y++
 					x = 0
 				case 0x1b:
+					// Undetected control sequence. Probably it was split
+					// between this and next event... seen something like
+					// this... let's try moving it to next event.
+					if len(unparsed) < 30 && iev+1 < len(c.EventStream) { // sanity check for our assumption
+						log.Printf("fixing ESC %q", unparsed)
+						c.EventStream[iev+1].Data = string(ch) + string(unparsed) + c.EventStream[iev+1].Data
+						log.Printf("fix: %q", c.EventStream[iev+1].Data)
+						unparsed = nil
+						continue
+					}
 					panic(fmt.Sprintf("undetected control sequence in event %d (t=%v) = %q (unparsed = %q)", iev, ev.Time, ev.Data, unparsed))
 				default:
 					scr.SetCell(x, y, rune(ch), fg, bg)
@@ -74,11 +87,11 @@ func main() {
 					}
 				case 'K': // clear parts of line
 					switch seqMode(seq, "0") {
-					case "0":
+					case "0", "":
 						// clear from cursor to end of line
 						clearCells(scr, x, y, w, y, bg)
 					default:
-						panic(fmt.Sprintf("unknown control sequence: %q %#v", ev.Data, seq))
+						panic(fmt.Sprintf("unknown control sequence in: %q %#v", ev.Data, seq))
 					}
 				case 'H': // position cursor
 					x, y = 0, 0
@@ -264,18 +277,28 @@ func parseANSISequence(b []byte) (*ansi.SequenceData, []byte) {
 		return nil, b
 	}
 
-	switch {
-	case b[1] == '[':
-		// log.Printf("got [")
-		// ok, continue
 	// TODO(akavel): properly handle two-byte sequences; for now, ignoring
 	// them; see: http://ascii-table.com/ansi-escape-sequences-vt-100.php
-	case bytes.HasPrefix(b[1:], []byte("(B")):
-		// log.Printf("got (B, ret=%q", b[3:])
-		return parseANSISequence(b[3:])
-	default:
+	var ignored = []string{"(B", ">"}
+	if b[1] != '[' {
+		for _, ign := range ignored {
+			if bytes.HasPrefix(b[1:], []byte(ign)) {
+				return parseANSISequence(b[len(ign)+1:])
+			}
+		}
 		panic(fmt.Sprintf("unknown ANSI sequence: %q", b))
 	}
+
+	// switch {
+	// case b[1] == '[':
+	// 	// log.Printf("got [")
+	// 	// ok, continue
+	// case bytes.HasPrefix(b[1:], []byte("(B")):
+	// 	// log.Printf("got (B, ret=%q", b[3:])
+	// 	return parseANSISequence(b[3:])
+	// default:
+	// 	panic(fmt.Sprintf("unknown ANSI sequence: %q", b))
+	// }
 
 	// TODO(akavel): would IndexFunc be faster?
 	icmd := bytes.IndexAny(b, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
