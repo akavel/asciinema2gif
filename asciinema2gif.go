@@ -199,7 +199,8 @@ func die(msg string) {
 func NewScreen(w, h int, font *truetype.Font) Screen {
 	// FIXME(akavel): variable font size & DPI, as flags
 	// Note: that's the default value used in the truetype package
-	const fontDPI = 72
+	// const fontDPI = 72
+	const fontDPI = 144
 	const fontSize = 12.0
 	// See: freetype.Context#recalc()
 	// at: https://github.com/golang/freetype/blob/41fa49aa5b23cc7c4082c9aaaf2da41e195602d9/freetype.go#L263
