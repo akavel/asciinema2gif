@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"image"
 	"image/color"
@@ -21,7 +22,14 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
+var (
+	dpi      = flag.Int("dpi", 144, "dots per inch (resolution)")
+	fontSize = flag.Float64("font-size", 12, "font size")
+)
+
 func main() {
+	flag.Parse()
+
 	c, err := cast.Decode(os.Stdin)
 	if err != nil {
 		die(err.Error())
@@ -202,9 +210,9 @@ func die(msg string) {
 func NewScreen(w, h int, font *truetype.Font) Screen {
 	// FIXME(akavel): variable font size & DPI, as flags
 	// Note: that's the default value used in the truetype package
-	const fontDPI = 72
+	fontDPI := float64(*dpi)
 	// const fontDPI = 144
-	const fontSize = 12.0
+	fontSize := *fontSize
 	// See: freetype.Context#recalc()
 	// at: https://github.com/golang/freetype/blob/41fa49aa5b23cc7c4082c9aaaf2da41e195602d9/freetype.go#L263
 	// also a comment from the same file:
@@ -215,7 +223,7 @@ func NewScreen(w, h int, font *truetype.Font) Screen {
 	// per pixel is recommended, since that is what
 	// the bytecode hinter uses [...]".
 	// TODO(akavel): check if something like this is maybe already available in new versions of freetype
-	const fontScale = fixed.Int26_6(fontSize * fontDPI * (64.0 / 72.0))
+	fontScale := fixed.Int26_6(fontSize * fontDPI * (64.0 / 72.0))
 
 	b := font.Bounds(fontScale)
 	cell := image.Rect(
