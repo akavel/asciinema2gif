@@ -10,6 +10,7 @@ import (
 	"image/color"
 	"image/draw"
 	"image/gif"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"unicode/utf8"
@@ -25,6 +26,7 @@ import (
 
 var (
 	dpi      = flag.Int("dpi", 144, "dots per inch (resolution)")
+	fontPath = flag.String("font", "", "path to TrueType font to use; if not specified, Go Mono is used")
 	fontSize = flag.Float64("font-size", 12, "font size")
 	maxPause = flag.Float64("i", 0, "max pause between frames, in seconds (0 means unlimited)")
 )
@@ -38,6 +40,13 @@ func main() {
 	}
 	w, h := int(c.Header.Width), int(c.Header.Height)
 
+	if *fontPath != "" {
+		data, err := ioutil.ReadFile(*fontPath)
+		if err != nil {
+			die(err.Error())
+		}
+		fontdata.TTF = data
+	}
 	font, err := truetype.Parse(fontdata.TTF)
 	if err != nil {
 		die(err.Error())
