@@ -18,6 +18,7 @@ import (
 	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
 	ansi "github.com/icecrime/ansi/internals"
+	fontopt "golang.org/x/image/font"
 	fontdata "golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/math/fixed"
 )
@@ -266,6 +267,7 @@ func NewScreen(w, h int, font *truetype.Font) Screen {
 	ctx.SetDPI(fontDPI)
 	ctx.SetDst(img)
 	ctx.SetClip(img.Bounds())
+	ctx.SetHinting(fontopt.HintingFull)
 
 	return Screen{
 		Image: img,
