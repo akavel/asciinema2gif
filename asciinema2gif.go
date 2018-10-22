@@ -238,6 +238,13 @@ func NewScreen(w, h int, font *truetype.Font) Screen {
 	// https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
 	pal := make(color.Palette, 256)
 	rgb := func(r, g, b uint8) color.RGBA { return color.RGBA{r, g, b, 255} }
+	pal[31] = rgb(222, 56, 43)
+	pal[32] = rgb(57, 181, 74)
+	pal[33] = rgb(255, 199, 6)
+	pal[34] = rgb(0, 111, 184)
+	pal[35] = rgb(118, 38, 113)
+	pal[36] = rgb(44, 181, 233)
+	pal[37] = rgb(204, 204, 204)
 	pal[90] = rgb(128, 128, 128)
 	pal[91] = rgb(255, 0, 0)
 	pal[92] = rgb(0, 255, 0)
