@@ -31,9 +31,9 @@ func main() {
 	_ = scr
 
 	x, y := 0, 0
-	scr.Image.Palette[0] = color.RGBA{0, 0, 0, 128}
-	scr.Image.Palette[1] = color.RGBA{255, 255, 255, 128}
-	scr.Image.Palette[2] = color.RGBA{255, 0, 0, 128}
+	scr.Image.Palette[0] = color.RGBA{0, 0, 0, 255}
+	scr.Image.Palette[1] = color.RGBA{255, 255, 255, 255}
+	scr.Image.Palette[2] = color.RGBA{255, 0, 0, 255}
 	for _, ev := range c.EventStream {
 		if ev.Type != "o" {
 			continue
