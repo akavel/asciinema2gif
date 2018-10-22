@@ -47,24 +47,6 @@ func main() {
 	for iev, ev := range c.EventStream {
 		if iev%100 == 99 {
 			os.Stderr.WriteString(".")
-			ff, err := os.Create(fmt.Sprintf("asciinema%d.gif", iev/100))
-			if err != nil {
-				panic(err)
-			}
-			img := &gif.GIF{
-				Image: []*image.Paletted{scr.Image},
-				Delay: []int{0},
-				Config: image.Config{
-					Width:  scr.Image.Bounds().Max.X,
-					Height: scr.Image.Bounds().Max.Y,
-				},
-			}
-			_ = tprev
-			err = gif.EncodeAll(ff, img)
-			if err != nil {
-				panic(err)
-			}
-			ff.Close()
 		}
 		if ev.Type != "o" {
 			continue
@@ -180,12 +162,16 @@ func main() {
 			}
 		}
 
-		// FIXME(akavel): only emit dirty rectangles (diff with previous img?)
-		// frame := image.NewPaletted(scr.Image.Bounds(), scr.Image.Palette)
-		// draw.Draw(frame, scr.Image.Bounds(), scr.Image, image.Pt(0, 0), draw.Src)
-		// anim.Image = append(anim.Image, frame)
-		// anim.Delay = append(anim.Delay, int((ev.Time-tprev)*100.0))
-		// tprev = ev.Time
+		// TODO(akavel): is this correct calculation of delay, or not? should we rather store tprev as int?
+		dt := int(ev.Time*100) - int(tprev*100)
+		if dt > 0 {
+			// FIXME(akavel): only emit dirty rectangles (diff with previous img?)
+			frame := image.NewPaletted(scr.Image.Bounds(), scr.Image.Palette)
+			draw.Draw(frame, scr.Image.Bounds(), scr.Image, image.Pt(0, 0), draw.Src)
+			anim.Image = append(anim.Image, frame)
+			anim.Delay = append(anim.Delay, dt)
+			tprev = ev.Time
+		}
 	}
 
 	pal := scr.Image.Palette
@@ -194,14 +180,6 @@ func main() {
 	}
 	scr.Image.Palette = pal
 
-	// img := &gif.GIF{
-	// 	Image: []*image.Paletted{scr.Image},
-	// 	Delay: []int{0},
-	// 	Config: image.Config{
-	// 		Width:  scr.Image.Bounds().Max.X,
-	// 		Height: scr.Image.Bounds().Max.Y,
-	// 	},
-	// }
 	f, err := os.Create("asciinema.gif")
 	if err != nil {
 		die(err.Error())
@@ -334,17 +312,6 @@ func parseANSISequence(b []byte) (*ansi.SequenceData, []byte) {
 		}
 		panic(fmt.Sprintf("unknown ANSI sequence: %q", b))
 	}
-
-	// switch {
-	// case b[1] == '[':
-	// 	// log.Printf("got [")
-	// 	// ok, continue
-	// case bytes.HasPrefix(b[1:], []byte("(B")):
-	// 	// log.Printf("got (B, ret=%q", b[3:])
-	// 	return parseANSISequence(b[3:])
-	// default:
-	// 	panic(fmt.Sprintf("unknown ANSI sequence: %q", b))
-	// }
 
 	// TODO(akavel): would IndexFunc be faster?
 	icmd := bytes.IndexAny(b, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
