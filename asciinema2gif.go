@@ -57,7 +57,13 @@ func main() {
 				switch ch {
 				case '\n':
 					y++
+					// x = 0
+				case '\r':
 					x = 0
+				case '\b':
+					if x > 0 {
+						x--
+					}
 				case 0x1b:
 					// Undetected control sequence. Probably it was split
 					// between this and next event... seen something like
