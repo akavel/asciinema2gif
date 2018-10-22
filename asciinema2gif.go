@@ -32,21 +32,27 @@ func main() {
 	x, y := 0, 0
 	scr.Image.Palette[0] = color.RGBA{0, 0, 0, 128}
 	scr.Image.Palette[1] = color.RGBA{255, 255, 255, 128}
-	for _, ev := range c.EventStream {
-		if ev.Type != "o" {
-			continue
-		}
-		lex := ansi.NewLexer([]byte(ev.Data))
-		for tok := lex.NextItem(); tok.T != ansi.EOF; tok = lex.NextItem() {
-			fmt.Printf("%s %q\n", tok.T.String(), string(tok.Value))
-			switch tok.T {
-			case ansi.RawBytes:
-				for _, ch := range tok.Value {
-					scr.SetCell(x, y, rune(ch), 1, 0)
-					x++
+	if false {
+		for _, ev := range c.EventStream {
+			if ev.Type != "o" {
+				continue
+			}
+			lex := ansi.NewLexer([]byte(ev.Data))
+			for tok := lex.NextItem(); tok.T != ansi.EOF; tok = lex.NextItem() {
+				fmt.Printf("%s %q\n", tok.T.String(), string(tok.Value))
+				switch tok.T {
+				case ansi.RawBytes:
+					for _, ch := range tok.Value {
+						scr.SetCell(x, y, rune(ch), 1, 0)
+						x++
+					}
 				}
 			}
 		}
+	}
+	for i := 0; i < scr.Image.Bounds().Max.X && i < scr.Image.Bounds().Max.Y; i++ {
+		scr.Image.SetColorIndex(i, i, 1)
+		// scr.Image.Set(i, i, 1)
 	}
 
 	// TODO: loop events:
@@ -55,8 +61,15 @@ func main() {
 	// TODO: - add image into gif struct
 	// TODO: render animated gif asciinema.gif
 
+	pal := scr.Image.Palette
+	for pal[len(pal)-1] == nil {
+		pal = pal[:len(pal)-1]
+	}
+	scr.Image.Palette = pal
+
 	img := &gif.GIF{
 		Image: []*image.Paletted{scr.Image},
+		Delay: []int{0},
 		Config: image.Config{
 			Width:  scr.Image.Bounds().Max.X,
 			Height: scr.Image.Bounds().Max.Y,
@@ -83,7 +96,7 @@ func NewScreen(w, h int, font *truetype.Font) Screen {
 	b := font.Bounds(fixed.I(10))
 	cw := b.Max.X - b.Min.X
 	ch := b.Max.Y - b.Min.Y
-	rect := image.Rect(0, 0, cw.Ceil(), ch.Ceil())
+	rect := image.Rect(0, 0, w*cw.Ceil(), h*ch.Ceil())
 	palette := make(color.Palette, 256)
 	img := image.NewPaletted(rect, palette)
 
