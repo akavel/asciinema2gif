@@ -19,8 +19,10 @@ func main() {
 		die(err.Error())
 	}
 
+	maxt := int(math.Ceil(c.EventStream[len(c.EventStream)-1].Time))
+
 	side := int(math.Ceil(math.Sqrt(float64(len(c.EventStream)))))
-	rect := image.Rect(0, 0, side, side+5)
+	rect := image.Rect(0, 0, side+maxt/side+1, side+5)
 
 	pal := make(color.Palette, 256)
 	rgb := func(r, g, b uint8) color.RGBA { return color.RGBA{r, g, b, 255} }
@@ -58,6 +60,10 @@ func main() {
 
 	tprev := 0.0
 	for iev, ev := range c.EventStream {
+		if iev%100 == 99 {
+			os.Stderr.WriteString(".")
+		}
+
 		dt := int(ev.Time*100) - int(tprev*100)
 		if dt > 0 {
 			// fmt.Println(int(ev.Time/blink), int(tprev/blink), ev.Time)
@@ -95,11 +101,18 @@ func main() {
 
 		// image inside, marking # of events
 		y := (iev + 1) / side
-		drawRect(img, 0, 0, side, y, 97)
-		y++
+		if y > 0 {
+			drawRect(img, 0, 0, side, y-1, 97)
+		}
 		drawRect(img, 0, y, (iev+1)%side, y, 97)
+		// fmt.Println(y, (iev+1)%side)
 
-		// TODO: 2nd image, marking T of events?
+		// 2nd image, marking T of events
+		dx := int(math.Ceil(ev.Time)) / side
+		if dx > 0 {
+			drawRect(img, side+1, 0, side+dx, side, 94)
+		}
+		drawRect(img, side+1+dx, 0, side+1+dx, int(math.Ceil(ev.Time))%side, 94)
 	}
 
 	f, err := os.Create("blink.gif")
