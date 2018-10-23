@@ -123,9 +123,10 @@ func main() {
 				}
 				dt = int(t*100) - int(tprev*100)
 				// fmt.Printf("dt= % 6d  t= %v\n", dt, t)
-				tprev = t
 				cur := scr.Grid[y*scr.GridW+x]
-				if cursor && int(t/blink)&1 == 1 {
+				// Note: we draw the *previous* frame, so we must base the
+				// cursor state calculations on tprev, not on t.
+				if cursor && int(tprev/blink)&1 == 1 {
 					scr.SetCell(x, y, cur.Ch, cur.Bg, cur.Fg)
 					if !dbg {
 						dbg = true
@@ -137,6 +138,7 @@ func main() {
 						// fmt.Println("_", t)
 					}
 				}
+				tprev = t
 				// FIXME(akavel): only emit dirty rectangles (diff with previous img?)
 				frame := image.NewPaletted(scr.Image.Bounds(), scr.Image.Palette)
 				draw.Draw(frame, scr.Image.Bounds(), scr.Image, image.Pt(0, 0), draw.Src)
