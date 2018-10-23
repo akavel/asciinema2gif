@@ -61,9 +61,48 @@ func main() {
 		},
 	}
 
+	// HACK: reduce max pauses between frames
+	if *maxPause >= 0.01 {
+		tprev := 0.0
+		sub := 0.0
+		for _, ev := range c.EventStream {
+			ev.Time -= sub
+			dt := ev.Time - tprev
+			if dt > *maxPause {
+				ev.Time -= dt - *maxPause
+				sub += dt - *maxPause
+			}
+			tprev = ev.Time
+		}
+	}
+
+	// HACK: artifically inject frames for cursor blink events...
+	const blink = 0.5
+	// {
+	// 	newEvents := []*cast.Event{}
+	// 	tprev := 0.0
+	// 	for i := 0; i < len(c.EventStream); i++ {
+	// 		ev := c.EventStream[i]
+	// 		if ev.Time > tprev+blink {
+	// 			tprev += blink + 0.0000001
+	// 			newEvents = append(newEvents, &cast.Event{
+	// 				Time: tprev,
+	// 				Type: "o",
+	// 			})
+	// 			i--
+	// 			continue
+	// 		}
+	// 		newEvents = append(newEvents, ev)
+	// 	}
+	// 	c.EventStream = newEvents
+	// }
+
 	x, y := 0, 0
 	fg, bg := 97, 30
 	tprev := 0.0
+	cursor := true
+	dbg := false
+	clearCells(scr, 0, 0, w-1, h-1, fg, bg)
 	for iev, ev := range c.EventStream {
 		if iev%100 == 99 {
 			os.Stderr.WriteString(".")
@@ -75,15 +114,39 @@ func main() {
 		// TODO(akavel): is this correct calculation of delay, or not? should we rather store tprev as int?
 		dt := int(ev.Time*100) - int(tprev*100)
 		if dt > 0 {
-			// FIXME(akavel): only emit dirty rectangles (diff with previous img?)
-			frame := image.NewPaletted(scr.Image.Bounds(), scr.Image.Palette)
-			draw.Draw(frame, scr.Image.Bounds(), scr.Image, image.Pt(0, 0), draw.Src)
-			anim.Image = append(anim.Image, frame)
-			if int(*maxPause*100) > 0 && dt > int(*maxPause*100) {
-				dt = int(*maxPause * 100)
+			// fmt.Println(int(ev.Time/blink), int(tprev/blink), ev.Time)
+			for tprev < ev.Time {
+				t := float64(int(tprev/blink)+1)*blink + 0.00001
+				// fmt.Println("\t", tprev, int(tprev/blink), cursor, dbg)
+				if t > ev.Time {
+					t = ev.Time
+				}
+				dt = int(t*100) - int(tprev*100)
+				// fmt.Printf("dt= % 6d  t= %v\n", dt, t)
+				tprev = t
+				cur := scr.Grid[y*scr.GridW+x]
+				if cursor && int(t/blink)&1 == 1 {
+					scr.SetCell(x, y, cur.Ch, cur.Bg, cur.Fg)
+					if !dbg {
+						dbg = true
+						// fmt.Println("#", t)
+					}
+				} else {
+					if dbg {
+						dbg = false
+						// fmt.Println("_", t)
+					}
+				}
+				// FIXME(akavel): only emit dirty rectangles (diff with previous img?)
+				frame := image.NewPaletted(scr.Image.Bounds(), scr.Image.Palette)
+				draw.Draw(frame, scr.Image.Bounds(), scr.Image, image.Pt(0, 0), draw.Src)
+				scr.SetCell(x, y, cur.Ch, cur.Fg, cur.Bg)
+				anim.Image = append(anim.Image, frame)
+				// if int(*maxPause*100) > 0 && dt > int(*maxPause*100) {
+				// 	dt = int(*maxPause * 100)
+				// }
+				anim.Delay = append(anim.Delay, dt)
 			}
-			anim.Delay = append(anim.Delay, dt)
-			tprev = ev.Time
 		}
 
 		unparsed := []byte(ev.Data)
@@ -102,7 +165,7 @@ func main() {
 				switch ch {
 				case '\t':
 					newx := x/8*8 + 8
-					clearCells(scr, x, y, newx-1, y, bg)
+					clearCells(scr, x, y, newx-1, y, fg, bg)
 					newx = x
 				case '\n':
 					y++
@@ -136,7 +199,7 @@ func main() {
 					switch seqMode(seq, "0") {
 					case "2", "3":
 						// clear whole screen
-						clearCells(scr, 0, 0, w, h, bg)
+						clearCells(scr, 0, 0, w-1, h-1, fg, bg)
 					default:
 						panic(fmt.Sprintf("unknown control sequence in: %q %#v", ev.Data, seq))
 					}
@@ -144,7 +207,7 @@ func main() {
 					switch seqMode(seq, "0") {
 					case "0", "":
 						// clear from cursor to end of line
-						clearCells(scr, x, y, w, y, bg)
+						clearCells(scr, x, y, w, y, fg, bg)
 					default:
 						panic(fmt.Sprintf("unknown control sequence in: %q %#v", ev.Data, seq))
 					}
@@ -184,7 +247,9 @@ func main() {
 					// see also: https://www.real-world-systems.com/docs/ANSIcode.html
 					switch cmd := string(seq.Params[0]) + string(seq.Command); cmd {
 					case "?25h": // TODO: show the cursor
+						cursor = true
 					case "?25l": // TODO: hide the cursor
+						cursor = false
 					case "?1049h": // TODO: enable alternative screen buffer
 					case "?1049l": // TODO: disable alternative screen buffer
 					case "?12l": // TODO: local echo - input from keyboard sent to screen
@@ -293,6 +358,8 @@ func NewScreen(w, h int, font *truetype.Font) Screen {
 		Image: img,
 		Font:  ctx,
 		Cell:  cell,
+		Grid:  make([]Cell, w*h),
+		GridW: w,
 	}
 }
 
@@ -300,12 +367,20 @@ type Screen struct {
 	Image *image.Paletted
 	Font  *freetype.Context
 	Cell  image.Rectangle
+	Grid  []Cell
+	GridW int
+}
+
+type Cell struct {
+	Ch     rune
+	Fg, Bg int
 }
 
 func (s *Screen) SetCell(x, y int, ch rune, fg, bg int) {
-	clearCells(*s, x, y, x, y, bg)
+	clearCells(*s, x, y, x, y, fg, bg)
 	s.Font.SetSrc(image.NewUniform(s.Image.Palette[fg]))
 	s.Font.DrawString(string(ch), fixed.P(x*s.Cell.Dx(), y*s.Cell.Dy()+s.Cell.Max.Y-1))
+	s.Grid[y*s.GridW+x] = Cell{ch, fg, bg}
 }
 
 func atoi(b []byte, default_ int) int {
@@ -326,11 +401,16 @@ func seqMode(seq *ansi.SequenceData, default_ string) string {
 	return string(seq.Params[0])
 }
 
-func clearCells(scr Screen, x1, y1, x2, y2 int, color int) {
+func clearCells(scr Screen, x1, y1, x2, y2 int, fg, bg int) {
 	rect := image.Rect(
 		x1*scr.Cell.Dx(), y1*scr.Cell.Dy(),
 		(x2+1)*scr.Cell.Dx(), (y2+1)*scr.Cell.Dy())
-	draw.Draw(scr.Image, rect, image.NewUniform(scr.Image.Palette[color]), image.Pt(0, 0), draw.Src)
+	draw.Draw(scr.Image, rect, image.NewUniform(scr.Image.Palette[bg]), image.Pt(0, 0), draw.Src)
+	for y := y1; y <= y2; y++ {
+		for x := x1; x <= x2; x++ {
+			scr.Grid[y*scr.GridW+x] = Cell{' ', fg, bg}
+		}
+	}
 }
 
 // TODO(akavel): better parser, less ad-hoc
