@@ -75,8 +75,7 @@ func main() {
 				}
 				dt = int(t*100) - int(tprev*100)
 				// fmt.Printf("dt= % 6d  t= %v\n", dt, t)
-				tprev = t
-				if int(t/blink)&1 == 1 {
+				if int(tprev/blink)&1 == 1 {
 					drawRect(img, 0, side+1, side, side+5, 31)
 					// if !dbg {
 					// 	dbg = true
@@ -89,6 +88,7 @@ func main() {
 					// 	// fmt.Println("_", t)
 					// }
 				}
+				tprev = t
 				frame := image.NewPaletted(img.Bounds(), img.Palette)
 				draw.Draw(frame, img.Bounds(), img, image.Pt(0, 0), draw.Src)
 				anim.Image = append(anim.Image, frame)
