@@ -1,6 +1,21 @@
-// TODO: GPL license
-
 package main
+
+// asciinema2gif - converts ASCIInema asciicast v2 files to animated GIFs
+// Copyright (C) 2018 by the asciinema2gif AUTHORS
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+// package main
 
 import (
 	"bytes"
@@ -76,32 +91,11 @@ func main() {
 		}
 	}
 
-	// HACK: artifically inject frames for cursor blink events...
 	const blink = 0.5
-	// {
-	// 	newEvents := []*cast.Event{}
-	// 	tprev := 0.0
-	// 	for i := 0; i < len(c.EventStream); i++ {
-	// 		ev := c.EventStream[i]
-	// 		if ev.Time > tprev+blink {
-	// 			tprev += blink + 0.0000001
-	// 			newEvents = append(newEvents, &cast.Event{
-	// 				Time: tprev,
-	// 				Type: "o",
-	// 			})
-	// 			i--
-	// 			continue
-	// 		}
-	// 		newEvents = append(newEvents, ev)
-	// 	}
-	// 	c.EventStream = newEvents
-	// }
-
 	x, y := 0, 0
 	fg, bg := 97, 30
 	tprev := 0.0
 	cursor := true
-	dbg := false
 	clearCells(scr, 0, 0, w-1, h-1, fg, bg)
 	for iev, ev := range c.EventStream {
 		if iev%100 == 99 {
@@ -114,29 +108,17 @@ func main() {
 		// TODO(akavel): is this correct calculation of delay, or not? should we rather store tprev as int?
 		dt := int(ev.Time*100) - int(tprev*100)
 		if dt > 0 {
-			// fmt.Println(int(ev.Time/blink), int(tprev/blink), ev.Time)
 			for tprev < ev.Time {
 				t := float64(int(tprev/blink)+1)*blink + 0.00001
-				// fmt.Println("\t", tprev, int(tprev/blink), cursor, dbg)
 				if t > ev.Time {
 					t = ev.Time
 				}
 				dt = int(t*100) - int(tprev*100)
-				// fmt.Printf("dt= % 6d  t= %v\n", dt, t)
 				cur := scr.Grid[y*scr.GridW+x]
 				// Note: we draw the *previous* frame, so we must base the
 				// cursor state calculations on tprev, not on t.
 				if cursor && int(tprev/blink)&1 == 1 {
 					scr.SetCell(x, y, cur.Ch, cur.Bg, cur.Fg)
-					if !dbg {
-						dbg = true
-						// fmt.Println("#", t)
-					}
-				} else {
-					if dbg {
-						dbg = false
-						// fmt.Println("_", t)
-					}
 				}
 				tprev = t
 				// FIXME(akavel): only emit dirty rectangles (diff with previous img?)
@@ -144,9 +126,6 @@ func main() {
 				draw.Draw(frame, scr.Image.Bounds(), scr.Image, image.Pt(0, 0), draw.Src)
 				scr.SetCell(x, y, cur.Ch, cur.Fg, cur.Bg)
 				anim.Image = append(anim.Image, frame)
-				// if int(*maxPause*100) > 0 && dt > int(*maxPause*100) {
-				// 	dt = int(*maxPause * 100)
-				// }
 				anim.Delay = append(anim.Delay, dt)
 			}
 		}
@@ -183,9 +162,7 @@ func main() {
 					// between this and next event... seen something like
 					// this... let's try moving it to next event.
 					if len(unparsed) < 30 && iev+1 < len(c.EventStream) { // sanity check for our assumption
-						// log.Printf("fixing ESC %q", unparsed)
 						c.EventStream[iev+1].Data = string(ch) + string(unparsed) + c.EventStream[iev+1].Data
-						// log.Printf("fix: %q", c.EventStream[iev+1].Data)
 						unparsed = nil
 						continue
 					}
@@ -289,10 +266,7 @@ func die(msg string) {
 }
 
 func NewScreen(w, h int, font *truetype.Font) Screen {
-	// FIXME(akavel): variable font size & DPI, as flags
-	// Note: that's the default value used in the truetype package
 	fontDPI := float64(*dpi)
-	// const fontDPI = 144
 	fontSize := *fontSize
 	// See: freetype.Context#recalc()
 	// at: https://github.com/golang/freetype/blob/41fa49aa5b23cc7c4082c9aaaf2da41e195602d9/freetype.go#L263
