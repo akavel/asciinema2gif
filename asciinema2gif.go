@@ -371,7 +371,7 @@ func atoi(b []byte, default_ int) int {
 }
 
 func seqMode(seq *ansi.SequenceData, default_ string) string {
-	if len(seq.Params) == 0 {
+	if len(seq.Params) == 0 || (len(seq.Params) == 1 && len(seq.Params[0]) == 0) {
 		return default_
 	}
 	return string(seq.Params[0])
