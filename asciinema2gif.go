@@ -410,7 +410,7 @@ func parseANSISequence(b []byte) (*ansi.SequenceData, []byte) {
 	}
 
 	// TODO(akavel): would IndexFunc be faster?
-	icmd := bytes.IndexAny(b, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	icmd := bytes.IndexAny(b, "@abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	if icmd == -1 {
 		// log.Printf("cmd not found in %q", b)
 		return nil, b
