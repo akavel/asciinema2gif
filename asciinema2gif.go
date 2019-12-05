@@ -180,7 +180,7 @@ func main() {
 						// clear whole screen
 						clearCells(scr, 0, 0, w-1, h-1, fg, bg)
 					default:
-						panic(fmt.Sprintf("unknown control sequence in: %q %#v", ev.Data, seq))
+						panic(fmt.Sprintf("unknown control sequence with J in: %q %#v", ev.Data, seq))
 					}
 				case 'K': // clear parts of line
 					switch seqMode(seq, "0") {
@@ -188,7 +188,7 @@ func main() {
 						// clear from cursor to end of line
 						clearCells(scr, x, y, w, y, fg, bg)
 					default:
-						panic(fmt.Sprintf("unknown control sequence in: %q %#v", ev.Data, seq))
+						panic(fmt.Sprintf("unknown control sequence with K in: %q %#v", ev.Data, seq))
 					}
 				case 'H': // position cursor
 					x, y = 0, 0
@@ -241,7 +241,7 @@ func main() {
 						panic(fmt.Sprintf("unknown control sequence: %q", cmd))
 					}
 				default:
-					panic(fmt.Sprintf("unknown control sequence: %q %#v", ev.Data, seq))
+					panic(fmt.Sprintf("unknown control sequence: %q %#v (command %c)", ev.Data, seq, seq.Command))
 				}
 			}
 		}
