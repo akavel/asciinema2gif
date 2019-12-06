@@ -27,6 +27,7 @@ import (
 	"image/gif"
 	"io/ioutil"
 	"os"
+	"runtime/pprof"
 	"strconv"
 	"unicode/utf8"
 
@@ -44,10 +45,23 @@ var (
 	fontPath = flag.String("font", "", "path to TrueType font to use; if not specified, Go Mono is used")
 	fontSize = flag.Float64("font-size", 12, "font size")
 	maxPause = flag.Float64("i", 0, "max pause between frames, in seconds (0 means unlimited)")
+	cpuprof  = flag.String("cpuprof", "", "write CPU profiling info into specified `file`")
 )
 
 func main() {
 	flag.Parse()
+
+	if *cpuprof != "" {
+		f, err := os.Create(*cpuprof)
+		if err != nil {
+			die(err.Error())
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			die(err.Error())
+		}
+		defer pprof.StopCPUProfile()
+	}
 
 	c, err := cast.Decode(os.Stdin)
 	if err != nil {
