@@ -112,7 +112,7 @@ func main() {
 	cursor := true
 	clearCells(scr, 0, 0, w-1, h-1, fg, bg)
 	for iev, ev := range c.EventStream {
-		if iev%100 == 99 {
+		if iev%100 == 0 {
 			os.Stderr.WriteString(".")
 		}
 		if ev.Type != "o" {
