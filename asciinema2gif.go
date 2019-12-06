@@ -121,12 +121,13 @@ func main() {
 					scr.SetCell(x, y, cur.Ch, cur.Bg, cur.Fg)
 				}
 				tprev = t
-				// FIXME(akavel): only emit dirty rectangles (diff with previous img?)
-				frame := image.NewPaletted(scr.Image.Bounds(), scr.Image.Palette)
-				draw.Draw(frame, scr.Image.Bounds(), scr.Image, image.Pt(0, 0), draw.Src)
+				frame := image.NewPaletted(scr.Dirty, scr.Image.Palette)
+				draw.Draw(frame, frame.Bounds(), scr.Image, scr.Dirty.Min, draw.Src)
+				scr.Dirty = image.Rectangle{}
 				scr.SetCell(x, y, cur.Ch, cur.Fg, cur.Bg)
 				anim.Image = append(anim.Image, frame)
 				anim.Delay = append(anim.Delay, dt)
+				anim.Disposal = append(anim.Disposal, gif.DisposalNone)
 			}
 		}
 
@@ -336,6 +337,7 @@ func NewScreen(w, h int, font *truetype.Font) Screen {
 		Cell:  cell,
 		Grid:  make([]Cell, w*h),
 		GridW: w,
+		Dirty: rect,
 	}
 }
 
@@ -345,6 +347,7 @@ type Screen struct {
 	Cell  image.Rectangle
 	Grid  []Cell
 	GridW int
+	Dirty image.Rectangle
 }
 
 type Cell struct {
@@ -357,6 +360,9 @@ func (s *Screen) SetCell(x, y int, ch rune, fg, bg int) {
 	s.Font.SetSrc(image.NewUniform(s.Image.Palette[fg]))
 	s.Font.DrawString(string(ch), fixed.P(x*s.Cell.Dx(), y*s.Cell.Dy()+s.Cell.Max.Y-1))
 	s.Grid[y*s.GridW+x] = Cell{ch, fg, bg}
+	s.Dirty = s.Dirty.Union(image.Rect(
+		x*s.Cell.Dx(), y*s.Cell.Dy(),
+		(x+1)*s.Cell.Dx(), (y+1)*s.Cell.Dy()))
 }
 
 func atoi(b []byte, default_ int) int {
