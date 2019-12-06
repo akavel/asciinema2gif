@@ -248,6 +248,17 @@ func main() {
 						c := scr.GetCell(xx-1, y)
 						scr.SetCell(xx, y, c.Ch, c.Fg, c.Bg)
 					}
+				case 'X':
+					// Erase character
+					// https://vt100.net/docs/vt510-rm/chapter4.html
+					x2 := x + atoi(seq.Params[0], 1)
+					for ; x < x2 && x < w; x++ {
+						c := scr.GetCell(x, y)
+						scr.SetCell(x, y, ' ', c.Fg, c.Bg)
+					}
+					if x >= w {
+						x = w - 1
+					}
 				case 'h', 'l':
 					// see also: https://www.real-world-systems.com/docs/ANSIcode.html
 					switch cmd := string(seq.Params[0]) + string(seq.Command); cmd {
