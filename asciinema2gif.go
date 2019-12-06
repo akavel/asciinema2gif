@@ -237,6 +237,17 @@ func main() {
 							}
 						}
 					}
+				case '@':
+					// Insert character
+					// https://vt100.net/docs/vt510-rm/chapter4.html
+					xx := w - 1
+					for xx > x && scr.GetCell(xx, y) == scr.GetCell(xx-1, y) {
+						xx-- // no need to redraw identical cells
+					}
+					for ; xx > x; xx-- {
+						c := scr.GetCell(xx-1, y)
+						scr.SetCell(xx, y, c.Ch, c.Fg, c.Bg)
+					}
 				case 'h', 'l':
 					// see also: https://www.real-world-systems.com/docs/ANSIcode.html
 					switch cmd := string(seq.Params[0]) + string(seq.Command); cmd {
@@ -377,6 +388,10 @@ func (s *Screen) SetCell(x, y int, ch rune, fg, bg int) {
 	s.Dirty = s.Dirty.Union(image.Rect(
 		x*s.Cell.Dx(), y*s.Cell.Dy(),
 		(x+1)*s.Cell.Dx(), (y+1)*s.Cell.Dy()))
+}
+
+func (s *Screen) GetCell(x, y int) Cell {
+	return s.Grid[y*s.GridW+x]
 }
 
 func atoi(b []byte, default_ int) int {
