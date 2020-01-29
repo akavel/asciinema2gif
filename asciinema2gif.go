@@ -31,10 +31,14 @@ import (
 	"strconv"
 	"unicode/utf8"
 
+	termbuf "github.com/akavel/csi/buffer"
+	termconfig "github.com/akavel/csi/config"
+	"github.com/akavel/csi/terminal"
 	"github.com/cirocosta/asciinema-edit/cast"
 	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
 	ansi "github.com/icecrime/ansi/internals"
+	"go.uber.org/zap"
 	fontopt "golang.org/x/image/font"
 	fontdata "golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/math/fixed"
@@ -81,6 +85,15 @@ func main() {
 		die(err.Error())
 	}
 
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		die(err.Error())
+	}
+	term := terminal.New(logger.Sugar(), &termconfig.DefaultConfig)
+	term.SetSize(uint(w), uint(h))
+	termchars := make(chan rune)
+	go term.ProcessInput(termchars)
+
 	scr := NewScreen(w, h, font)
 
 	anim := &gif.GIF{
@@ -123,6 +136,37 @@ func main() {
 		dt := int(ev.Time*100) - int(tprev*100)
 		if dt > 0 {
 			for tprev < ev.Time {
+				// Copy contents from term buffer to virtual screen
+				buf := term.ActiveBuffer()
+				bw, bh := int(buf.ViewWidth()), int(buf.ViewHeight())
+				if bw > w {
+					// FIXME: how to make sure this never becomes bigger?
+					bw = w
+				}
+				if bh > h {
+					// FIXME: how to make sure this never becomes bigger?
+					bh = h
+				}
+				for by := 0; by < bh; by++ {
+					for bx := 0; bx < bw; bx++ {
+						c := buf.GetCell(uint16(bx), uint16(by))
+						if c == nil {
+							cc := termbuf.NewBackgroundCell([3]float32{0, 0, 0})
+							c = &cc
+						}
+						old := scr.GetCell(bx, by)
+						if old.Ch != c.Rune() ||
+							colorUnfloat[c.Fg()] != old.Fg ||
+							colorUnfloat[c.Bg()] != old.Bg {
+							scr.SetCell(bx, by, c.Rune(),
+								colorUnfloat[c.Fg()], colorUnfloat[c.Bg()])
+						}
+					}
+				}
+				x = int(term.GetLogicalCursorX())
+				y = int(term.GetLogicalCursorY())
+
+				// Render screen & cursor to GIF file
 				t := float64(int(tprev/blink)+1)*blink + 0.00001
 				if t > ev.Time {
 					t = ev.Time
@@ -147,140 +191,9 @@ func main() {
 
 		unparsed := []byte(ev.Data)
 		for len(unparsed) > 0 {
-			var seq *ansi.SequenceData
-			seq, unparsed = parseANSISequence(unparsed)
-
-			if seq == nil {
-				if len(unparsed) == 0 {
-					continue
-				}
-				// sequence not detected, so we just have raw byte
-				// TODO(akavel): handle non-utf8 encodings?
-				ch, sz := utf8.DecodeRune(unparsed)
-				unparsed = unparsed[sz:]
-				switch ch {
-				case '\t':
-					newx := x/8*8 + 8
-					clearCells(scr, x, y, newx-1, y, fg, bg)
-					newx = x
-				case '\n':
-					y++
-					// x = 0
-				case '\r':
-					x = 0
-				case '\b':
-					if x > 0 {
-						x--
-					}
-				case 0x1b:
-					// Undetected control sequence. Probably it was split
-					// between this and next event... seen something like
-					// this... let's try moving it to next event.
-					if len(unparsed) < 30 && iev+1 < len(c.EventStream) { // sanity check for our assumption
-						c.EventStream[iev+1].Data = string(ch) + string(unparsed) + c.EventStream[iev+1].Data
-						unparsed = nil
-						continue
-					}
-					panic(fmt.Sprintf("undetected control sequence in event %d (t=%v) = %q (unparsed = %q)", iev, ev.Time, ev.Data, unparsed))
-				default:
-					scr.SetCell(x, y, ch, fg, bg)
-					x++
-				}
-			} else {
-				// ANSI control sequence detected
-				switch seq.Command {
-				case 'J': // clear parts of the screen
-					switch seqMode(seq, "0") {
-					case "2", "3":
-						// clear whole screen
-						clearCells(scr, 0, 0, w-1, h-1, fg, bg)
-					default:
-						panic(fmt.Sprintf("unknown control sequence with J in: %q %#v", ev.Data, seq))
-					}
-				case 'K': // clear parts of line
-					switch seqMode(seq, "0") {
-					case "0", "":
-						// clear from cursor to end of line
-						clearCells(scr, x, y, w, y, fg, bg)
-					default:
-						panic(fmt.Sprintf("unknown control sequence with K in: %q %#v", ev.Data, seq))
-					}
-				case 'H': // position cursor
-					x, y = 0, 0
-					if len(seq.Params) >= 1 {
-						y = atoi(seq.Params[0], 1) - 1
-					}
-					if len(seq.Params) >= 2 {
-						x = atoi(seq.Params[1], 1) - 1
-					}
-				case 'C': // move cursor forward, unless past EOL already
-					x += atoi([]byte(seqMode(seq, "1")), 1)
-					// TODO: should we also clear? or not?
-					if x >= w {
-						x = w - 1
-					}
-				case 'm': // set colors
-					if len(seq.Params) == 0 {
-						fg, bg = 97, 30
-					} else {
-						for _, p := range seq.Params {
-							n := atoi(p, 0)
-							switch {
-							case 90 <= n && n <= 97:
-								fg = n
-							case 100 <= n && n <= 107:
-								bg = n - 10
-							case n == 0:
-								fg, bg = 97, 30
-							default:
-								panic("unknown color param " + string(p))
-							}
-						}
-					}
-				case '@':
-					// Insert character
-					// https://vt100.net/docs/vt510-rm/chapter4.html
-					xx := w - 1
-					for xx > x && scr.GetCell(xx, y) == scr.GetCell(xx-1, y) {
-						xx-- // no need to redraw identical cells
-					}
-					for ; xx > x; xx-- {
-						c := scr.GetCell(xx-1, y)
-						scr.SetCell(xx, y, c.Ch, c.Fg, c.Bg)
-					}
-				case 'X':
-					// Erase character
-					// https://vt100.net/docs/vt510-rm/chapter4.html
-					x2 := x + atoi(seq.Params[0], 1)
-					for ; x < x2 && x < w; x++ {
-						c := scr.GetCell(x, y)
-						scr.SetCell(x, y, ' ', c.Fg, c.Bg)
-					}
-					if x >= w {
-						x = w - 1
-					}
-				case 'h', 'l':
-					// see also: https://www.real-world-systems.com/docs/ANSIcode.html
-					switch cmd := string(seq.Params[0]) + string(seq.Command); cmd {
-					case "?25h": // TODO: show the cursor
-						cursor = true
-					case "?25l": // TODO: hide the cursor
-						cursor = false
-					case "?1049h": // TODO: enable alternative screen buffer
-					case "?1049l": // TODO: disable alternative screen buffer
-					case "?12l": // TODO: local echo - input from keyboard sent to screen
-					case "?1l": // TODO: transmit only unprotected characters ???
-					case "?1000l": // TODO: ??? part of "rs2" reset sequence for VTE (?)
-					case "?1002l": // TODO: ??? something related to mouse?
-					case "?1003l": // TODO: ??? something related to mouse?
-					case "?1006l": // TODO: ??? something related to mouse?
-					default:
-						panic(fmt.Sprintf("unknown control sequence: %q", cmd))
-					}
-				default:
-					panic(fmt.Sprintf("unknown control sequence: %q %#v (command %c)", ev.Data, seq, seq.Command))
-				}
-			}
+			ch, sz := utf8.DecodeRune(unparsed)
+			unparsed = unparsed[sz:]
+			termchars <- ch
 		}
 	}
 
@@ -465,4 +378,26 @@ func parseANSISequence(b []byte) (*ansi.SequenceData, []byte) {
 		Params:  bytes.Split(b[2:icmd], []byte(";")),
 		Command: b[icmd],
 	}, b[icmd+1:]
+}
+
+var colorUnfloat = map[[3]float32]int{
+	{float32(0xe8) / 255, float32(0xdf) / 255, float32(0xd6) / 255}: 31,
+	{float32(0x02) / 255, float32(0x1b) / 255, float32(0x21) / 255}: 30,
+
+	{float32(0x00) / 255, float32(0x00) / 255, float32(0x00) / 255}: 30,
+	{float32(0x80) / 255, float32(0x00) / 255, float32(0x00) / 255}: 31,
+	{float32(0x00) / 255, float32(0x80) / 255, float32(0x00) / 255}: 32,
+	{float32(0x80) / 255, float32(0x80) / 255, float32(0x00) / 255}: 33,
+	{float32(0x00) / 255, float32(0x00) / 255, float32(0x80) / 255}: 34,
+	{float32(0x80) / 255, float32(0x00) / 255, float32(0x80) / 255}: 35,
+	{float32(0x00) / 255, float32(0x80) / 255, float32(0x80) / 255}: 36,
+	{float32(0xf2) / 255, float32(0xf2) / 255, float32(0xf2) / 255}: 37,
+	{float32(0x80) / 255, float32(0x80) / 255, float32(0x80) / 255}: 90,
+	{float32(0xff) / 255, float32(0x00) / 255, float32(0x00) / 255}: 91,
+	{float32(0x00) / 255, float32(0xff) / 255, float32(0x00) / 255}: 92,
+	{float32(0xff) / 255, float32(0xff) / 255, float32(0x00) / 255}: 93,
+	{float32(0x00) / 255, float32(0x00) / 255, float32(0xff) / 255}: 94,
+	{float32(0xff) / 255, float32(0x00) / 255, float32(0xff) / 255}: 95,
+	{float32(0x00) / 255, float32(0xff) / 255, float32(0xff) / 255}: 96,
+	{float32(0xff) / 255, float32(0xff) / 255, float32(0xff) / 255}: 97,
 }
