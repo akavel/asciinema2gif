@@ -137,6 +137,8 @@ func main() {
 		if dt > 0 {
 			for tprev < ev.Time {
 				// Copy contents from term buffer to virtual screen
+				x = int(term.GetLogicalCursorX())
+				y = int(term.GetLogicalCursorY())
 				buf := term.ActiveBuffer()
 				bw, bh := int(buf.ViewWidth()), int(buf.ViewHeight())
 				if bw > w {
@@ -163,8 +165,6 @@ func main() {
 						}
 					}
 				}
-				x = int(term.GetLogicalCursorX())
-				y = int(term.GetLogicalCursorY())
 
 				// Render screen & cursor to GIF file
 				t := float64(int(tprev/blink)+1)*blink + 0.00001
@@ -381,7 +381,7 @@ func parseANSISequence(b []byte) (*ansi.SequenceData, []byte) {
 }
 
 var colorUnfloat = map[[3]float32]int{
-	{float32(0xe8) / 255, float32(0xdf) / 255, float32(0xd6) / 255}: 31,
+	{float32(0xe8) / 255, float32(0xdf) / 255, float32(0xd6) / 255}: 37,
 	{float32(0x02) / 255, float32(0x1b) / 255, float32(0x21) / 255}: 30,
 
 	{float32(0x00) / 255, float32(0x00) / 255, float32(0x00) / 255}: 30,
